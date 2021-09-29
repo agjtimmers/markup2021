@@ -50,3 +50,5 @@ table <- kable(info[info$covered == F, ]) #nice table
 table
 
 
+#try to change something
+
