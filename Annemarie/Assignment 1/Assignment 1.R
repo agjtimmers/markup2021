@@ -16,7 +16,7 @@ for (i in 1:nsamples) {
 stats <- function(x){
   meanx <- mean(x)
   abias <- abs(meanx - 0)
-  se <- sd(x) / sqrt(length(x))
+  se <- 1 / sqrt(length(x))
   df <- length(x) - 1
   error <- qt(0.975, df) * se
   lower <- meanx - error
@@ -48,7 +48,6 @@ ggplot(info, aes(1:100, mean, col = covered)) + #different color denotes if the 
 library(knitr)
 table <- kable(info[info$covered == F, ]) #nice table
 table
-
 
 #try to change something
 
