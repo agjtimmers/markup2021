@@ -1,0 +1,142 @@
+---
+title: "Exercise 2"
+author: "Annemarie Timmers"
+date: "23-10-2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Aim
+
+The goal of this document is to train two competing models, test them on a test dataset and compare their performance with their mean squared error (MSE) on the test set, wherein a lower value indicates a better performance.
+
+### Set up
+
+#### Fixing the random seed
+
+I fix the seed of the random number generator so that the train and test set that I will create later, can always be reproduced and the same results are obtained if the code in this document is ran again. 
+
+```{r}
+set.seed(123)
+```
+
+#### Loading the required packages
+
+```{r warning = FALSE, message = FALSE}
+library(mlbench) #dataset
+library(tidyverse)
+```
+
+### Load the dataset
+
+I use the `BostonHousing` dataset that was published by Harrison and Rubinfield in 1979. The data was collected in 1970 by the U.S. Census Service in the Boston Standard Metropolitan Statistical Area and contains 506 census tracts (geographical areas). The dependent variable is `medv`, which is the median value of the housing prices in the respective census tracts, which I will refer to as housing price. I choose `rm` and `lstat` as predictors, which are the average number of rooms per house in the tracts and the percentage of the population of the tracts that is of a lower socioeconomic status, respectively.
+
+I remove the missing values for easy processing. 
+
+```{r results = 'hide'}
+data(BostonHousing) %>%
+  na.omit #and get rid of missing values
+```
+
+### Prepare the data
+
+```{r}
+#center the predictors
+BostonHousing$rm.cent <- scale(BostonHousing$rm, scale = F)
+BostonHousing$lstat.cent <- scale(BostonHousing$lstat, scale = F)
+```
+
+### Split the dataset up
+
+Then, the data is split up in a test and training dataset. 
+
+```{r}
+dt <- sample(nrow(BostonHousing), nrow(BostonHousing)*0.67)
+train <- BostonHousing[dt,]
+test  <- BostonHousing[-dt,]
+```
+
+### Train the models
+
+```{r}
+train_model1 <- lm(medv ~ rm.cent + lstat.cent, data = train)
+train_model2 <- lm(medv ~ rm.cent + lstat.cent + I(rm.cent^2), data = train)
+```
+
+### Test the models
+
+Subsequently, a column is added to the test set that contains the predicted housing price based on the model that was estimated using the training set. 
+
+```{r}
+test$medv_pred1 <- predict(train_model1, newdata = test)
+test$medv_pred2 <- predict(train_model2, newdata = test)
+```
+
+### Compute MSE
+
+The MSE is calculated by squaring the difference between the predicted and observed values and taking the mean of the result. 
+
+```{r}
+#make function that calculates the mean squared error
+mse <- function(obs, pred){
+  se <- (obs - pred)^2 #squared difference
+  return(mean(se)) #and then the mean of that
+}
+
+#calculate the mse for both models
+mse1 <- mse(test$medv, test$medv_pred1)
+mse2 <- mse(test$medv, test$medv_pred2)
+
+#display
+cbind(mse1, mse2)
+
+```
+
+### Results
+
+As is depicted above, the second model performs better than the first. This means that the relation between the number of rooms in a house and the housing price is nonlinear. 
+
+### Replication with another seed
+
+```{r}
+set.seed(321)
+
+#center the predictors
+BostonHousing$rm.cent <- scale(BostonHousing$rm, scale = F)
+BostonHousing$lstat.cent <- scale(BostonHousing$lstat, scale = F)
+
+#split the data up
+dt <- sample(nrow(BostonHousing), nrow(BostonHousing)*0.67)
+train <- BostonHousing[dt,]
+test  <- BostonHousing[-dt,]
+
+#train the models
+train_model1 <- lm(medv ~ rm.cent + lstat.cent, data = train)
+train_model2 <- lm(medv ~ rm.cent + lstat.cent + I(rm.cent^2), data = train)
+
+#predict new values
+test$medv_pred1 <- predict(train_model1, newdata = test)
+test$medv_pred2 <- predict(train_model2, newdata = test)
+
+#calculate the mse for both models
+mse1 <- mse(test$medv, test$medv_pred1)
+mse2 <- mse(test$medv, test$medv_pred2)
+
+#display
+cbind(mse1, mse2)
+
+```
+
+### Conclusion
+
+Setting a different seed changes the numbers, but the conclusion remains the same: the second model performs better than the first, because the MSE is smaller. So, the relation between the median value of owner-occupied homes in USD and the average number of rooms per dwelling is likely nonlinear. 
+
+### Session info
+
+```{r session}
+sessionInfo()
+```
+
