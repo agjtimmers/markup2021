@@ -11,13 +11,13 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ### Aim
 
-The goal of this document is to train two competing models, test them on a test dataset and compare their performance with their mean squared error (MSE) on the test set, wherein a lower value indicates a better performance.
+As I am learning about machine learning in another course, I want to see how the number of folds in k-fold cross-validation influences the mean squared error by doing a Monte Carlo simulation. I will try 3, 5 and 10 folds and plot the results. 
 
 ### Set up
 
 #### Fixing the random seed
 
-I fix the seed of the random number generator so that the train and test set that I will create later, can always be reproduced and the same results are obtained if the code in this document is ran again. 
+I fix the seed of the random number generator so that the results can be reproduced and the same results are obtained if the code in this document is ran again. 
 
 ```{r}
 set.seed(123)
@@ -32,7 +32,9 @@ library(tidyverse)
 
 ### Load the dataset
 
-I use the `BostonHousing` dataset that was published by Harrison and Rubinfield in 1979. The data was collected in 1970 by the U.S. Census Service in the Boston Standard Metropolitan Statistical Area and contains 506 census tracts (geographical areas). The dependent variable is `medv`, which is the median value of the housing prices in the respective census tracts, which I will refer to as housing price. I choose `rm` and `lstat` as predictors, which are the average number of rooms per house in the tracts and the percentage of the population of the tracts that is of a lower socioeconomic status, respectively.
+I use the `BostonHousing` dataset that was published by Harrison and Rubinfield in 1979. The data was collected in 1970 by the U.S. Census Service in the Boston Standard Metropolitan Statistical Area and contains 506 census tracts (geographical areas). The dependent variable is `medv`, which is the median value of the housing prices in the respective census tracts. I choose `rm` and `lstat` as predictors, which are the average number of rooms per house in the tracts and the percentage of the population of the tracts that is of a lower socioeconomic status, respectively.
+
+I am not really interested in the theoretical implications of the model, but these predictors were chosen as the have highest correlation with the dependent variable. 
 
 I remove the missing values for easy processing. 
 
@@ -41,98 +43,120 @@ data(BostonHousing) %>%
   na.omit #and get rid of missing values
 ```
 
-### Prepare the data
+### Cross-validation
+
+I first need a function that actually does cross-validation. This means 
 
 ```{r}
-#center the predictors
-BostonHousing$rm.cent <- scale(BostonHousing$rm, scale = F)
-BostonHousing$lstat.cent <- scale(BostonHousing$lstat, scale = F)
-```
-
-### Split the dataset up
-
-Then, the data is split up in a test and training dataset. 
-
-```{r}
-dt <- sample(nrow(BostonHousing), nrow(BostonHousing)*0.67)
-train <- BostonHousing[dt,]
-test  <- BostonHousing[-dt,]
-```
-
-### Train the models
-
-```{r}
-train_model1 <- lm(medv ~ rm.cent + lstat.cent, data = train)
-train_model2 <- lm(medv ~ rm.cent + lstat.cent + I(rm.cent^2), data = train)
-```
-
-### Test the models
-
-Subsequently, a column is added to the test set that contains the predicted housing price based on the model that was estimated using the training set. 
-
-```{r}
-test$medv_pred1 <- predict(train_model1, newdata = test)
-test$medv_pred2 <- predict(train_model2, newdata = test)
-```
-
-### Compute MSE
-
-The MSE is calculated by squaring the difference between the predicted and observed values and taking the mean of the result. 
-
-```{r}
-#make function that calculates the mean squared error
+#make a function to calculate the mean squared error
 mse <- function(obs, pred){
   se <- (obs - pred)^2 #squared difference
   return(mean(se)) #and then the mean of that
 }
 
-#calculate the mse for both models
-mse1 <- mse(test$medv, test$medv_pred1)
-mse2 <- mse(test$medv, test$medv_pred2)
+#make a function that does cross validation for the model of interest, where I can alter the number of folds
+cross_validate <-function(folds){
+  
+  #first split the dataset up 
+  n_samples  <- nrow(BostonHousing)
+  select_vec <- rep(1:folds, length.out = n_samples)
+  splits <- BostonHousing %>% 
+    mutate(set = sample(select_vec))
+  
+  mse_test <- NULL #storage
+  
+  #for loop to calculate the mse for each of the test sets in the folds
+  for (i in 1:folds) { # Start for-loop over folds
+    #not great efficiency, but alas
+    fold <- splits$set
+    #specify the train and test set for the current iteration
+    index <- which(fold == i, arr.ind = TRUE)
+    test  <- BostonHousing[index, ]
+    train <- BostonHousing[-index, ]
+    #run the model on the train set
+    train_model <- lm(medv ~ rm + lstat, data = train)
+    #predict new values in the test set
+    test$medv_pred <- predict(train_model, newdata = test)
+    #and calculate the mse
+    mse_test[i] <- mse(test$medv, test$medv_pred)
+  } 
+  return(mean(mse_test)) #I would want all 10 values, but that is not really   what I'm interested in and it makes what comes later run nicer
+}
 
-#display
-cbind(mse1, mse2)
+#test the function
+cross_validate(10) #seems to run smoothly
+```
 
+### Monte Carlo simulation
+
+In order to get an indication of the effect of the number of folds, I repeat the process 1000 times, storing the mean of each cross-validation and plotting the results.
+
+```{r}
+set.seed(123)
+nsim <- 1000 #number of simulations
+
+#first do 10 folds
+mc_cv10 <- NULL #storage
+for (i in 1:nsim) {
+  mc_cv10[i] <- cross_validate(10)
+}
+
+#then 5
+mc_cv5 <- NULL #storage
+for (i in 1:nsim) {
+  mc_cv5[i]  <- cross_validate(5)
+}
+
+#finally just 3
+mc_cv3 <- NULL #storage
+for (i in 1:nsim) {
+  mc_cv3[i]  <- cross_validate(3)
+}
+
+#plot the results
+boxplot(mc_cv3, mc_cv5, mc_cv10, 
+        main = "MSE for 3, 5 and 10 folds",
+        col = c("yellow", "red", "blue"),
+        ylab = "MSE", 
+        xlab = "Number of folds",
+        names = c("3", "5", "10"))
 ```
 
 ### Results
-
-As is depicted above, the second model performs better than the first. This means that the relation between the number of rooms in a house and the housing price is nonlinear. 
+The mean MSE over the simulations is the same, regardless of the number of folds. However, increasing the number of folds does seem to lower the spread of the mean squared errors. 
 
 ### Replication with another seed
 
 ```{r}
 set.seed(321)
 
-#center the predictors
-BostonHousing$rm.cent <- scale(BostonHousing$rm, scale = F)
-BostonHousing$lstat.cent <- scale(BostonHousing$lstat, scale = F)
+mc_cv10 <- NULL
+for (i in 1:nsim) {
+  mc_cv10[i] <- mean(cross_validate(10))
+}
 
-#split the data up
-dt <- sample(nrow(BostonHousing), nrow(BostonHousing)*0.67)
-train <- BostonHousing[dt,]
-test  <- BostonHousing[-dt,]
+mc_cv5 <- NULL
+for (i in 1:nsim) {
+  mc_cv5[i] <- mean(cross_validate(5))
+}
 
-#train the models
-train_model1 <- lm(medv ~ rm.cent + lstat.cent, data = train)
-train_model2 <- lm(medv ~ rm.cent + lstat.cent + I(rm.cent^2), data = train)
+mc_cv3 <- NULL
+for (i in 1:nsim) {
+  mc_cv3[i] <- mean(cross_validate(3))
+}
 
-#predict new values
-test$medv_pred1 <- predict(train_model1, newdata = test)
-test$medv_pred2 <- predict(train_model2, newdata = test)
-
-#calculate the mse for both models
-mse1 <- mse(test$medv, test$medv_pred1)
-mse2 <- mse(test$medv, test$medv_pred2)
-
-#display
-cbind(mse1, mse2)
-
+#plot the results
+boxplot(mc_cv3, mc_cv5, mc_cv10, 
+        col = c("yellow", "red", "blue"),
+        main = "MSE for 3, 5 and 10 folds",
+        ylab = "MSE", 
+        xlab = "Number of folds",
+        names = c("3", "5", "10"))
 ```
 
 ### Conclusion
 
-Setting a different seed changes the numbers, but the conclusion remains the same: the second model performs better than the first, because the MSE is smaller. So, the relation between the median value of owner-occupied homes in USD and the average number of rooms per dwelling is likely nonlinear. 
+Repeating the simulation with another seed alters the boxplots a little, but the results still indicate the same thing: increasing the number of folds renders the same MSE over the simulations, but it does make the results more stable. 
 
 ### Session info
 
